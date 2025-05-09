@@ -30,11 +30,11 @@ env:
   PUBLISHER_AZURE_WEBAPP_PACKAGE_PATH: './src/Marketplace.SaaS.Accelerator.AdminSite/publish'
   SQLSCRIPT_PATH: './src/Marketplace.SaaS.Accelerator.AdminSite/publish'
   DOTNET_CORE_VERSION: '8.0.303'
-  
+
 jobs:
   deployandtest:
     name: Deploy and test
-    runs-on: ubuntu-latest
+    runs-on: nscloud-ubuntu-22.04-amd64-4x16
     environment: dev
 
     steps:
@@ -59,11 +59,11 @@ jobs:
       run: |
         dotnet build ${{ env.PUBLISHER_PROJECT }} --configuration Release
         dotnet publish ${{ env.PUBLISHER_PROJECT }} --configuration Release --no-build --output ${{ env.PUBLISHER_AZURE_WEBAPP_PACKAGE_PATH }}
-   
+
     # Run unit tests
     - name: Run unit Test
       run: dotnet test ${{ env.SERVICES_TEST_PROJECT }}
-  
+
     # Deploy to Azure Web app
     - name: Customer App deploy to azure
       uses: azure/webapps-deploy@v2
@@ -79,13 +79,13 @@ jobs:
         app-name: ${{ secrets.AZURE_PUBLISHER_WEBAPP_NAME }}
         publish-profile: ${{ secrets.AZURE_PUBLISHER_WEBAPP_PUBLISH_PROFILE }}
         package: ${{ env.PUBLISHER_AZURE_WEBAPP_PACKAGE_PATH }}
-    
+
     - name: EF Database Update
       shell: pwsh
       run: |
             Write-Host "dotnet tools restore"
             dotnet tool install --global dotnet-ef --version 8.0.0
-            
+
             Write-Host "Set to the Admin site connection string"
             $sqlServerName = "${{ secrets.SQL_SERVER_NAME }}"
             $sqlServerFullName = $sqlServerName+".database.windows.net"            
@@ -96,19 +96,19 @@ jobs:
             $connectionString = $Connection="Data Source=tcp:"+$sqlServerFullName+",1433;Initial Catalog="+$sqlDatabaseName+";User Id="+$sqlAdminLogin+"@"+$sqlServerFullName+";Password="+$sqlAdminPassword+";"
             $publisherPath = "${{env.PUBLISHER_PROJECT_PATH}}/appsettings.Development.json"
             Set-Content -Path $publisherPath -value "{`"ConnectionStrings`": {`"DefaultConnection`":`"$connectionString`"}}"
-            
+
             Write-Host "Generate sql script"
             $sqlscriptPath = "${{env.SQLSCRIPT_PATH}}/script.sql"
             $dbAccessProj = "${{env.DATAACCESS_PROJECT}}"
             $adminSiteProj = "${{env.PUBLISHER_PROJECT}}"
             dotnet-ef migrations script  --output $sqlscriptPath --idempotent --context SaaSKitContext --project $dbAccessProj --startup-project $adminSiteProj
-            
+
             Write-Host "Run sql script"
             Set-PSRepository PSGallery -InstallationPolicy Trusted
             Install-Module sqlserver
             Invoke-Sqlcmd -InputFile $sqlscriptPath -ServerInstance $sqlServerFullName -database $sqlDatabaseName -Username $sqlAdminLogin -Password $sqlAdminPassword 
             Write-Host "Database updated successfully"
-  
+
 
     # Run Admin APP UI tests
     - name: Admin App UI Tests
